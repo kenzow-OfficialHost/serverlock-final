@@ -12,3 +12,7 @@ cd serverlock-final
 chmod +x install.sh
 
 ./install.sh
+
+## ServerLock Version Support
+
+![ServerLock Version Support](docs/images/version-support.png)
