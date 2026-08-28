@@ -1,0 +1,41 @@
+info:
+  name: 'Server Lock'
+  identifier: 'serverlock'
+  description: 'Requires a password before a server console can be viewed.'
+  flags: ''
+  version: '1.0.0'
+  # TODO: samakan dengan target Blueprint di panelmu.
+  # Cek versi Blueprint kamu lewat: blueprint -version
+  # lalu isi target sesuai (misal 'beta-2026-01').
+  target: 'beta-2026-08'
+  author: 'Ken'
+  icon: ''
+  website: ''
+
+admin:
+  view: 'admin/index.blade.php'
+  controller: ''
+  css: ''
+  wrapper: ''
+
+dashboard:
+  css: ''
+  wrapper: ''
+  components: 'components'
+
+data:
+  directory: 'data'
+  public: ''
+  console: ''
+
+requests:
+  views: ''
+  # Folder ini di-copy Blueprint ke app/ milik Pterodactyl.
+  app: 'app'
+  routers:
+    application: ''
+    client: 'routes/client.php'
+    web: ''
+
+database:
+  migrations: 'database/migrations'

@@ -1,0 +1,242 @@
+import React, { ReactNode, useEffect, useState } from 'react';
+
+interface LockGateProps {
+    serverId: string;
+    children: ReactNode;
+}
+
+async function getStatus(serverId: string) {
+    const response = await fetch(
+        `/api/client/extensions/serverlock/status/${encodeURIComponent(serverId)}`,
+        {
+            method: 'GET',
+            credentials: 'include',
+            headers: {
+                Accept: 'application/json',
+            },
+        }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    console.log('[ServerLock] status', {
+        serverId,
+        http: response.status,
+        data,
+    });
+
+    return {
+        ok: response.ok,
+        locked: data.locked === true,
+    };
+}
+
+async function verifyPassword(serverId: string, password: string) {
+    const response = await fetch(
+        `/api/client/extensions/serverlock/verify/${encodeURIComponent(serverId)}`,
+        {
+            method: 'POST',
+            credentials: 'include',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ password }),
+        }
+    );
+
+    const data = await response.json().catch(() => ({}));
+
+    return {
+        ok: response.ok,
+        valid: data.valid === true,
+    };
+}
+
+export default ({ serverId, children }: LockGateProps) => {
+    const [checking, setChecking] = useState(true);
+    const [locked, setLocked] = useState(false);
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        setChecking(true);
+        setLocked(false);
+        setError('');
+
+        getStatus(serverId)
+            .then(({ ok, locked }) => {
+                if (cancelled) return;
+
+                // API gagal = JANGAN lock.
+                if (!ok) {
+                    console.error('[ServerLock] status API gagal:', serverId);
+                    setLocked(false);
+                    setError('');
+                } else {
+                    setLocked(locked);
+                }
+
+                setChecking(false);
+            })
+            .catch((err) => {
+                if (cancelled) return;
+
+                console.error('[ServerLock] status exception:', err);
+
+                // Jangan pernah mengunci semua server gara-gara API error.
+                setLocked(false);
+                setChecking(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [serverId]);
+
+    const submit = async () => {
+        if (!password || submitting) return;
+
+        setSubmitting(true);
+        setError('');
+
+        try {
+            const result = await verifyPassword(serverId, password);
+
+            if (result.ok && result.valid) {
+                setLocked(false);
+                setPassword('');
+                setError('');
+            } else {
+                setError('Password salah.');
+                setPassword('');
+            }
+        } catch (err) {
+            console.error('[ServerLock] verify exception:', err);
+            setError('Gagal menghubungi server.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    if (checking) {
+        return null;
+    }
+
+    if (!locked) {
+        return <>{children}</>;
+    }
+
+    return (
+        <div
+            style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 999999,
+                background: 'rgba(0, 0, 0, 0.97)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '24px',
+                boxSizing: 'border-box',
+            }}
+        >
+            <div
+                style={{
+                    width: '100%',
+                    maxWidth: '420px',
+                    background: '#111',
+                    border: '1px solid #333',
+                    borderRadius: '12px',
+                    padding: '32px',
+                    boxSizing: 'border-box',
+                    textAlign: 'center',
+                    color: '#fff',
+                }}
+            >
+                <div style={{ fontSize: '42px', marginBottom: '12px' }}>
+                    🔒
+                </div>
+
+                <h2 style={{ margin: '0 0 10px', fontSize: '22px' }}>
+                    Server Terkunci
+                </h2>
+
+                <p
+                    style={{
+                        color: '#aaa',
+                        margin: '0 0 20px',
+                        fontSize: '14px',
+                    }}
+                >
+                    Masukkan password untuk mengakses server ini.
+                </p>
+
+                <input
+                    type="password"
+                    value={password}
+                    autoFocus
+                    disabled={submitting}
+                    onChange={(e) => setPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            submit();
+                        }
+                    }}
+                    placeholder="Password server"
+                    style={{
+                        width: '100%',
+                        boxSizing: 'border-box',
+                        padding: '12px 14px',
+                        borderRadius: '8px',
+                        border: '1px solid #444',
+                        background: '#080808',
+                        color: '#fff',
+                        outline: 'none',
+                        fontSize: '15px',
+                        textAlign: 'center',
+                        marginBottom: '12px',
+                    }}
+                />
+
+                {error && (
+                    <div
+                        style={{
+                            color: '#ff6b6b',
+                            fontSize: '13px',
+                            marginBottom: '12px',
+                        }}
+                    >
+                        {error}
+                    </div>
+                )}
+
+                <button
+                    type="button"
+                    onClick={submit}
+                    disabled={submitting || !password}
+                    style={{
+                        width: '100%',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        border: 'none',
+                        background:
+                            submitting || !password ? '#555' : '#fff',
+                        color: '#000',
+                        fontWeight: 700,
+                        fontSize: '14px',
+                        cursor:
+                            submitting || !password
+                                ? 'not-allowed'
+                                : 'pointer',
+                    }}
+                >
+                    {submitting ? 'Memeriksa...' : 'Buka Server'}
+                </button>
+            </div>
+        </div>
+    );
+};

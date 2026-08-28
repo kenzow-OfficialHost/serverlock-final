@@ -1,0 +1,26 @@
+# Secrets / environment
+.env
+.env.*
+!.env.example
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Temporary
+/tmp/
+/tmp*
+*.log
+
+# Production database dumps
+database/*.sql
+
+# Archives
+*.tar.gz
+*.zip
+
+# Node/build generated files
+node_modules/
+public/assets/

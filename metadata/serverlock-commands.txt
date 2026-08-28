@@ -1,0 +1,4 @@
+ serverlock
+  serverlock:lock                      Kunci sebuah server dengan password yang digenerate otomatis (hanya bisa dijalankan dari VPS/SSH).
+  serverlock:status                    Lihat status lock server (satu server, atau daftar semua yang pernah diset).
+  serverlock:unlock                    Matikan lock pada sebuah server (hanya bisa dijalankan dari VPS/SSH).

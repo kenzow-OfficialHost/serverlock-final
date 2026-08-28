@@ -1,0 +1,13 @@
+# PENTING: nama area di bawah ("Server.Console.BeforeContent") ini
+# perlu kamu konfirmasi ulang ke dokumentasi Components.yml Blueprint
+# (blueprint.zip/docs/configs/componentsyml) atau tanya di Discord Blueprint,
+# karena daftar area resmi bisa beda-beda tergantung versi target panelmu.
+#
+# Yang pasti ada & terverifikasi: "Dashboard.Serverlist.BeforeContent"
+# (nempel di ATAS daftar server, bukan di halaman console tiap server).
+# Kalau area "Server.Console.BeforeContent" ternyata tidak ada di versimu,
+# pindahkan komponen ke Dashboard.Serverlist.BeforeContent sebagai gantinya
+# -- efeknya jadi lock muncul begitu masuk dashboard, bukan per klik server.
+
+Server.Console.BeforeContent:
+  - LockGate

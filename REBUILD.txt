@@ -1,0 +1,45 @@
+SERVERLOCK FINAL REBUILD PACKAGE
+=================================
+
+Contents:
+
+source/
+    blueprint-dev/
+    blueprint-extension/
+    runtime/
+    backups/
+
+database/
+    ext_serverlock_locks.sql
+
+metadata/
+    installed_extensions
+    extensionfs.php
+    serverlock-migration-status.txt
+    serverlock-routes.txt
+    serverlock-commands.txt
+
+checksums/
+    SHA256SUMS.txt
+
+IMPORTANT
+=========
+
+This package contains ServerLock source/runtime changes
+and the ext_serverlock_locks database table.
+
+The original Pterodactyl .env file is intentionally NOT included.
+A new VPS must have its own valid Pterodactyl installation,
+database, APP_KEY, and environment configuration.
+
+Do not blindly overwrite a production Pterodactyl installation.
+Restore the ServerLock files according to the paths recorded
+in the package.
+
+Database:
+    ext_serverlock_locks
+
+Commands:
+    php artisan serverlock:lock
+    php artisan serverlock:status
+    php artisan serverlock:unlock

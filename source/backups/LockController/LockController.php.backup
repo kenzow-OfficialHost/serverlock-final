@@ -1,0 +1,94 @@
+<?php
+
+namespace Pterodactyl\Http\Controllers\Extensions\Serverlock;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Pterodactyl\Http\Controllers\Controller;
+use Pterodactyl\Models\Server;
+
+class LockController extends Controller
+{
+    /**
+     * Resolve server berdasarkan uuidShort dan pastikan user
+     * memang mempunyai akses ke server tersebut.
+     */
+    protected function findServerForUser(Request $request, string $identifier): Server
+    {
+        $server = Server::where(function ($query) use ($identifier) {
+            $query->where('uuidShort', $identifier)
+                ->orWhere('uuid', $identifier)
+                ->orWhere('id', is_numeric($identifier) ? (int) $identifier : -1);
+        })->firstOrFail();
+
+        $user = $request->user();
+
+        if ($user->root_admin || $server->owner_id === $user->id) {
+            return $server;
+        }
+
+        abort_unless(
+            $server->subusers()->where('user_id', $user->id)->exists(),
+            403,
+            'Kamu tidak punya akses ke server ini.'
+        );
+
+        return $server;
+    }
+
+    /**
+     * GET /status/{server}
+     *
+     * Server hanya dianggap terkunci jika:
+     * - record lock milik UUID server tersebut ada
+     * - enabled = 1
+     */
+    public function status(Request $request, string $server)
+    {
+        $srv = $this->findServerForUser($request, $server);
+
+        $lock = DB::table('ext_serverlock_locks')
+            ->where('server_uuid', $srv->uuid)
+            ->where('enabled', 1)
+            ->first();
+
+        return response()->json([
+            'locked' => $lock !== null,
+        ]);
+    }
+
+    /**
+     * POST /verify/{server}
+     */
+    public function verify(Request $request, string $server)
+    {
+        $request->validate([
+            'password' => 'required|string',
+        ]);
+
+        $srv = $this->findServerForUser($request, $server);
+
+        $lock = DB::table('ext_serverlock_locks')
+            ->where('server_uuid', $srv->uuid)
+            ->where('enabled', 1)
+            ->first();
+
+        // Tidak ada lock aktif = langsung valid.
+        if (!$lock) {
+            return response()->json([
+                'valid' => true,
+            ]);
+        }
+
+        $valid = Hash::check(
+            $request->input('password'),
+            $lock->password_hash
+        );
+
+        return response()->json(
+            ['valid' => $valid],
+            $valid ? 200 : 401
+        );
+    }
+}
