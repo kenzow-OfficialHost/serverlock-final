@@ -1,17 +1,4 @@
 UNTUK VPS PTERO YANG UDAH DI INSTAL blueprint
-->
-->
-->
-
-cd /var/www
-
-git clone https://github.com/kenzow-OfficialHost/serverlock-final.git
-
-cd serverlock-final
-
-chmod +x install.sh
-
-./install.sh
 
 ## ServerLock Version Support
 
@@ -82,3 +69,54 @@ blueprint -version
 ````
 
 > ⚠️ **Backup dulu** folder panel + database sebelum menjalankan ini di server produksi. Referensi resmi: [blueprint.zip/guides/admin/install](https://blueprint.zip/guides/admin/install)
+>
+## Cara Install ServerLock
+
+> Pastikan Blueprint Framework sudah terpasang dulu (lihat bagian instalasi Blueprint di atas).
+
+````bash
+cd /var/www
+
+git clone https://github.com/kenzow-OfficialHost/serverlock-final.git
+
+cd serverlock-final
+
+chmod +x install.sh
+
+./install.sh
+````
+
+Script `install.sh` ini otomatis akan:
+
+1. Cek kamu jalan sebagai root
+2. Cek Pterodactyl terpasang di `/var/www/pterodactyl`
+3. Cek Blueprint (`blueprint -version`) sudah ada
+4. Clone repo ServerLock ke folder sementara
+5. Backup file-file panel yang bakal ditimpa (tersimpan di `/root/serverlock-backup-<tanggal>`)
+6. Pasang runtime ServerLock (`app/`, `database/`, `resources/`, `routes/`)
+7. Pasang file Blueprint extension-nya (tanpa menghapus extension lain yang sudah ada)
+8. Jalankan migration database
+9. Perbaiki permission `storage` & `bootstrap/cache`
+10. Bersihkan cache Laravel
+11. Build ulang frontend (`yarn build:production`)
+12. Validasi otomatis: cek command, route, dan tabel database ServerLock
+
+Setelah selesai, command yang tersedia:
+
+````bash
+php artisan serverlock:lock
+php artisan serverlock:status
+php artisan serverlock:unlock
+````
+
+Untuk reset password user tertentu:
+
+````bash
+/tmp/serverlock-final-install/scripts/serverlock-reset-user.sh USER_ID
+````
+
+> ⚠️ Backup manual folder panel + database juga disarankan sebelum menjalankan installer ini di server produksi, meskipun script sudah membuat backup otomatis.
+
+````
+
+Silakan gabungkan ke README, lalu commit seperti langkah sebelumnya (isi commit message, pilih commit ke `main`, klik **Commit changes**).
