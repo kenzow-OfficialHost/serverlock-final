@@ -1,4 +1,28 @@
 #!/usr/bin/env bash
+#
+# ==========================================
+#   SERVERLOCK FINAL — AUTO INSTALLER v2
+# ==========================================
+#
+# Versi ini adalah hasil rombak total setelah proses debugging penuh:
+# menutup semua celah yang bikin instalasi versi lama gagal / setengah jalan.
+#
+# Perbaikan dibanding versi lama:
+#   1. Menyalin folder `private/` (termasuk conf.yml) ke .blueprint/extensions/serverlock
+#      -> tanpa ini, Blueprint TIDAK akan pernah tahu extension ini punya versi/info.
+#   2. Mendaftarkan "serverlock" ke registry
+#      .blueprint/extensions/blueprint/private/db/installed_extensions
+#      -> INI KUNCI UTAMA supaya ServerLock muncul di /admin/extensions.
+#      Tanpa baris ini, extension bisa jalan di backend tapi TIDAK PERNAH
+#      muncul di halaman admin, walau semua file lain sudah benar.
+#   3. Menambahkan alias webpack '@blueprint/extensions/serverlock' secara
+#      otomatis ke webpack.config.js kalau belum ada
+#      -> tanpa ini, build frontend gagal dengan error:
+#         "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'"
+#   4. Menyalin admin/index.blade.php (halaman detail extension di admin panel).
+#   5. Idempotent: aman dijalankan berkali-kali (tidak dobel-append registry,
+#      tidak dobel-tambah alias webpack).
+#
 set -Eeuo pipefail
 
 PANEL="/var/www/pterodactyl"
@@ -7,7 +31,7 @@ TMP="/tmp/serverlock-final-install"
 BACKUP="/root/serverlock-backup-$(date +%Y%m%d-%H%M%S)"
 
 echo "=========================================="
-echo "   SERVERLOCK FINAL AUTO INSTALLER"
+echo "   SERVERLOCK FINAL AUTO INSTALLER v2"
 echo "=========================================="
 
 # ============================================================
@@ -41,21 +65,29 @@ echo "[OK] Pterodactyl ditemukan."
 
 if ! command -v blueprint >/dev/null 2>&1; then
     echo "ERROR: Blueprint tidak ditemukan."
+    echo "Install Blueprint dulu (lihat README.md bagian 1) sebelum lanjut."
     exit 1
 fi
 
 echo "[OK] Blueprint ditemukan."
 blueprint -version || true
 
+REGFILE="$PANEL/.blueprint/extensions/blueprint/private/db/installed_extensions"
+
+if [[ ! -f "$REGFILE" ]]; then
+    echo "ERROR: registry Blueprint ($REGFILE) tidak ditemukan."
+    echo "Instalasi Blueprint kamu kemungkinan rusak/tidak lengkap."
+    exit 1
+fi
+
 # ============================================================
 # 4. CLONE REPOSITORY
 # ============================================================
 
 echo
-echo "[1/7] Clone ServerLock..."
+echo "[1/10] Clone ServerLock..."
 
 rm -rf "$TMP"
-
 git clone --depth 1 "$REPO" "$TMP"
 
 echo "[OK] Repository berhasil di-clone."
@@ -65,13 +97,12 @@ echo "[OK] Repository berhasil di-clone."
 # ============================================================
 
 echo
-echo "[2/7] Membuat backup..."
+echo "[2/10] Membuat backup..."
 
 mkdir -p "$BACKUP"
 
 backup_file() {
     local file="$1"
-
     if [[ -e "$PANEL/$file" || -L "$PANEL/$file" ]]; then
         mkdir -p "$BACKUP/$(dirname "$file")"
         cp -a "$PANEL/$file" "$BACKUP/$file"
@@ -82,21 +113,20 @@ backup_file "app/Console/Kernel.php"
 backup_file "app/Providers/Blueprint/RouteServiceProvider.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/LockController.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/Concerns/ResolvesServer.php"
-backup_file "app/Http/Controllers/Admin/Extensions/serverlock/serverlockExtensionController.php"
 backup_file "database/migrations/2026_08_27_000000_create_ext_serverlock_locks_table.php"
 backup_file "resources/scripts/routers/ServerRouter.tsx"
-backup_file "resources/scripts/blueprint/extensions/LockGate.tsx"
-backup_file "resources/scripts/blueprint/extensions/Components.yml"
 backup_file "routes/blueprint/client/serverlock.php"
+backup_file "webpack.config.js"
+backup_file ".blueprint/extensions/blueprint/private/db/installed_extensions"
 
 echo "[OK] Backup: $BACKUP"
 
 # ============================================================
-# 6. RESTORE RUNTIME
+# 6. RUNTIME (app/, database/, resources/, routes/)
 # ============================================================
 
 echo
-echo "[3/7] Memasang ServerLock runtime..."
+echo "[3/10] Memasang ServerLock runtime..."
 
 cd "$PANEL"
 
@@ -108,62 +138,98 @@ cp -a "$TMP/source/runtime/routes/." "$PANEL/routes/"
 echo "[OK] Runtime ServerLock dipasang."
 
 # ============================================================
-# 7. BLUEPRINT FILES
+# 7. FOLDER EXTENSION BLUEPRINT (LENGKAP — termasuk private/)
 # ============================================================
 
 echo
-echo "[4/7] Memasang file Blueprint ServerLock..."
+echo "[4/10] Memasang folder extension .blueprint/extensions/serverlock..."
 
-# Hanya salin file yang berasal dari package ServerLock.
-# Tidak menimpa seluruh .blueprint agar extension lain
-# seperti Crimson Abyss tidak ikut terhapus.
+# Hanya salin isi folder milik ServerLock sendiri. Tidak menimpa
+# seluruh .blueprint/extensions agar extension lain (mis. Crimson Abyss)
+# tidak ikut terganggu/terhapus.
 
-if [[ -d "$PANEL/.blueprint" ]]; then
+mkdir -p "$PANEL/.blueprint/extensions/serverlock"
 
-    mkdir -p \
-        "$PANEL/.blueprint/extensions/serverlock"
+cp -a "$TMP/source/blueprint-extension/app"        "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
+cp -a "$TMP/source/blueprint-extension/components"  "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
+cp -a "$TMP/source/blueprint-extension/routers"     "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
+cp -a "$TMP/source/blueprint-extension/assets"      "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
 
-    cp -a \
-        "$TMP/source/blueprint-extension/app" \
-        "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
+# --- FIX #1: private/ (isinya conf.yml) WAJIB ikut disalin. ---
+# Blueprint membaca versi & info extension dari:
+#   .blueprint/extensions/serverlock/private/.store/conf.yml
+# Tanpa ini extensionConfig() akan selalu null.
+cp -a "$TMP/source/blueprint-extension/private" "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
 
-    cp -a \
-        "$TMP/source/blueprint-extension/components" \
-        "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
-
-    cp -a \
-        "$TMP/source/blueprint-extension/routers" \
-        "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
-
-    cp -a \
-        "$TMP/source/blueprint-extension/assets" \
-        "$PANEL/.blueprint/extensions/serverlock/" 2>/dev/null || true
-
+# --- Admin view (halaman detail extension di admin panel) ---
+mkdir -p "$PANEL/.blueprint/extensions/serverlock/admin"
+if [[ -f "$TMP/source/blueprint-dev/admin/index.blade.php" ]]; then
+    cp -a "$TMP/source/blueprint-dev/admin/index.blade.php" \
+        "$PANEL/.blueprint/extensions/serverlock/admin/index.blade.php"
 fi
 
-echo "[OK] Blueprint ServerLock dipasang."
+echo "[OK] Folder extension ServerLock dipasang lengkap."
 
 # ============================================================
-# 8. DATABASE
-# ============================================================
-
-echo
-echo "[5/7] Menjalankan migration..."
-
-cd "$PANEL"
-
-php artisan migrate --force
-
-echo "[OK] Migration selesai."
-
-# ============================================================
-# 9. PERMISSION
+# 8. FIX #2 — DAFTARKAN KE REGISTRY BLUEPRINT (WAJIB!)
 # ============================================================
 
 echo
-echo "[6/7] Memperbaiki permission..."
+echo "[5/10] Mendaftarkan ServerLock ke registry Blueprint..."
+
+# Blueprint menentukan "extension apa saja yang terinstall" BUKAN dengan
+# scan folder, tapi dengan baca 1 file teks ini:
+#   .blueprint/extensions/blueprint/private/db/installed_extensions
+# Formatnya: |nama1,|nama2,|nama3,
+#
+# Tanpa baris di bawah ini, ServerLock TIDAK AKAN PERNAH muncul di
+# halaman /admin/extensions walaupun semua file lain sudah lengkap.
+
+if grep -q "serverlock" "$REGFILE" 2>/dev/null; then
+    echo "[OK] 'serverlock' sudah terdaftar di registry, dilewati."
+else
+    printf '|serverlock,' >> "$REGFILE"
+    echo "[OK] 'serverlock' berhasil ditambahkan ke registry."
+fi
+
+chown www-data:www-data "$REGFILE"
+
+# ============================================================
+# 9. FIX #3 — ALIAS WEBPACK
+# ============================================================
+
+echo
+echo "[6/10] Memastikan alias webpack terpasang..."
+
+# ServerRouter.tsx meng-import komponen LockGate lewat alias:
+#   @blueprint/extensions/serverlock/LockGate
+# Alias ini harus ada di resolve.alias milik webpack.config.js,
+# kalau tidak, build akan gagal dengan "Module not found".
+
+WEBPACK_CFG="$PANEL/webpack.config.js"
+
+if grep -q "@blueprint/extensions/serverlock" "$WEBPACK_CFG" 2>/dev/null; then
+    echo "[OK] Alias webpack sudah ada, dilewati."
+else
+    if grep -q "alias: {" "$WEBPACK_CFG"; then
+        sed -i "/alias: {/a\\    '@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components')," "$WEBPACK_CFG"
+        echo "[OK] Alias webpack berhasil ditambahkan."
+    else
+        echo "PERINGATAN: tidak ketemu blok 'alias: {' di webpack.config.js."
+        echo "Tambahkan manual baris berikut di dalam resolve.alias:"
+        echo "  '@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components'),"
+    fi
+fi
+
+# ============================================================
+# 10. PERMISSION
+# ============================================================
+
+echo
+echo "[7/10] Memperbaiki permission..."
 
 chown -R www-data:www-data \
+    "$PANEL/.blueprint/extensions/serverlock" \
     "$PANEL/storage" \
     "$PANEL/bootstrap/cache"
 
@@ -174,36 +240,48 @@ chmod -R ug+rwX \
 echo "[OK] Permission selesai."
 
 # ============================================================
-# 10. CACHE
+# 11. DATABASE
 # ============================================================
+
+echo
+echo "[8/10] Menjalankan migration..."
+
+cd "$PANEL"
+php artisan migrate --force
+
+echo "[OK] Migration selesai."
+
+# ============================================================
+# 12. CACHE
+# ============================================================
+
+echo
+echo "[9/10] Membersihkan cache..."
 
 php artisan optimize:clear
 
 echo "[OK] Laravel cache dibersihkan."
 
 # ============================================================
-# 11. FRONTEND BUILD
+# 13. FRONTEND BUILD
 # ============================================================
 
 echo
-echo "[7/7] Build frontend..."
+echo "[10/10] Build frontend..."
 
 cd "$PANEL"
 
 if [[ ! -d node_modules ]]; then
-    echo "node_modules belum ada."
-    echo "Menjalankan yarn install..."
-
+    echo "node_modules belum ada, menjalankan yarn install..."
     yarn install --frozen-lockfile
 fi
 
-NODE_OPTIONS=--openssl-legacy-provider \
-    yarn build:production
+NODE_OPTIONS=--openssl-legacy-provider yarn build:production
 
 echo "[OK] Frontend build selesai."
 
 # ============================================================
-# 12. VALIDASI
+# 14. VALIDASI
 # ============================================================
 
 echo
@@ -213,26 +291,20 @@ echo "=========================================="
 
 echo
 echo "--- Commands ---"
-
-php artisan list | grep -E \
-    'serverlock:(lock|status|unlock)' \
-    || {
-        echo "ERROR: command ServerLock tidak ditemukan."
-        exit 1
-    }
+php artisan list | grep -E 'serverlock:(lock|status|unlock)' || {
+    echo "ERROR: command ServerLock tidak ditemukan."
+    exit 1
+}
 
 echo
 echo "--- Routes ---"
-
-php artisan route:list 2>/dev/null | grep serverlock \
-    || {
-        echo "ERROR: route ServerLock tidak ditemukan."
-        exit 1
-    }
+php artisan route:list 2>/dev/null | grep serverlock || {
+    echo "ERROR: route ServerLock tidak ditemukan."
+    exit 1
+}
 
 echo
 echo "--- Database ---"
-
 php artisan tinker --execute='
 try {
     $count = DB::table("ext_serverlock_locks")->count();
@@ -245,19 +317,26 @@ try {
 '
 
 echo
+echo "--- Registry Blueprint ---"
+cat "$REGFILE"; echo
+
+echo
 echo "=========================================="
 echo " SERVERLOCK BERHASIL DIINSTALL"
 echo "=========================================="
 echo
-echo "Backup:"
+echo "Cek di browser: https://domain-panel-kamu/admin/extensions"
+echo "Kartu 'Server Lock' harus sudah muncul di situ."
+echo
+echo "Backup perubahan tersimpan di:"
 echo "$BACKUP"
 echo
-echo "Commands:"
-echo "  php artisan serverlock:lock"
-echo "  php artisan serverlock:status"
-echo "  php artisan serverlock:unlock"
+echo "Cara pakai:"
+echo "  php artisan serverlock:lock {server}     # kunci server (id/uuid/uuidShort)"
+echo "  php artisan serverlock:status [server]   # lihat status (kosongkan utk lihat semua)"
+echo "  php artisan serverlock:unlock {server}   # buka kunci server"
 echo
-echo "Reset password User ID:"
+echo "Reset password user tertentu:"
 echo "  $TMP/scripts/serverlock-reset-user.sh USER_ID"
 echo
 echo "=========================================="

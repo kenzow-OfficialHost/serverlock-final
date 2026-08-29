@@ -20,19 +20,8 @@ const getStatus = async (serverId: string): Promise<LockStatus> => {
 
     const url = `/api/client/extensions/serverlock/status/${encodeURIComponent(identifier)}`;
 
-    console.log('[ServerLock] CHECK:', {
-        serverId: identifier,
-        url,
-    });
-
     try {
         const response = await http.get(url);
-
-        console.log('[ServerLock] RESPONSE:', {
-            serverId: identifier,
-            status: response.status,
-            data: response.data,
-        });
 
         return {
             locked: response.status === 200 && response.data?.locked === true,
@@ -59,18 +48,52 @@ const verifyPassword = async (serverId: string, password: string): Promise<boole
             }
         );
 
-        console.log('[ServerLock] VERIFY:', {
-            serverId: identifier,
-            status: response.status,
-            data: response.data,
-        });
-
         return response.status === 200 && response.data?.valid === true;
     } catch (error) {
         console.error('[ServerLock] VERIFY ERROR:', error);
         return false;
     }
 };
+
+/**
+ * Ikon gembok, murni SVG (bukan emoji) supaya konsisten tampilannya
+ * di semua OS/browser dan bisa diberi efek glow lewat CSS filter.
+ */
+const LockIcon = () => (
+    <svg
+        width="56"
+        height="56"
+        viewBox="0 0 24 24"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{
+            filter: 'drop-shadow(0 0 10px rgba(255,255,255,.55))',
+        }}
+    >
+        <rect
+            x="5"
+            y="11"
+            width="14"
+            height="10"
+            rx="2"
+            stroke="#ffffff"
+            strokeWidth="1.6"
+        />
+        <path
+            d="M8 11V7a4 4 0 0 1 8 0v4"
+            stroke="#ffffff"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+        />
+        <circle cx="12" cy="16" r="1.6" fill="#ffffff" />
+        <path
+            d="M12 17.6V19"
+            stroke="#ffffff"
+            strokeWidth="1.6"
+            strokeLinecap="round"
+        />
+    </svg>
+);
 
 export default ({ serverId, children }: LockGateProps) => {
     const [checking, setChecking] = useState(true);
@@ -88,16 +111,9 @@ export default ({ serverId, children }: LockGateProps) => {
             setError('');
             setPassword('');
 
-            console.log('[ServerLock] CURRENT SERVER:', serverId);
-
             const result = await getStatus(serverId);
 
             if (cancelled) return;
-
-            console.log('[ServerLock] FINAL STATE:', {
-                serverId,
-                locked: result.locked,
-            });
 
             setLocked(result.locked);
             setChecking(false);
@@ -163,7 +179,7 @@ export default ({ serverId, children }: LockGateProps) => {
             <div
                 style={{
                     width: '100%',
-                    maxWidth: '420px',
+                    maxWidth: '460px',
                     background: '#111',
                     border: '1px solid #333',
                     borderRadius: '12px',
@@ -174,32 +190,66 @@ export default ({ serverId, children }: LockGateProps) => {
                     boxShadow: '0 20px 60px rgba(0,0,0,.7)',
                 }}
             >
-                <div
-                    style={{
-                        fontSize: '42px',
-                        marginBottom: '12px',
-                    }}
-                >
-                    🔒
+                <div style={{ marginBottom: '14px' }}>
+                    <LockIcon />
                 </div>
 
                 <h2
                     style={{
-                        margin: '0 0 10px',
+                        margin: '0 0 14px',
                         fontSize: '22px',
                     }}
                 >
                     Server Terkunci
                 </h2>
 
+                {/* ==== WARNING PRIVASI ==== */}
+                <div
+                    style={{
+                        marginBottom: '20px',
+                        padding: '14px 16px',
+                        borderRadius: '10px',
+                        border: '1px solid rgba(255,45,45,.55)',
+                        background: 'rgba(255,45,45,.08)',
+                    }}
+                >
+                    <p
+                        style={{
+                            margin: '0 0 6px',
+                            fontSize: '15px',
+                            fontWeight: 800,
+                            letterSpacing: '.3px',
+                            color: '#ff3b3b',
+                            textShadow:
+                                '0 0 6px rgba(255,255,255,.85), 0 0 14px rgba(255,59,59,.65)',
+                        }}
+                    >
+                        STOP RUSUH. STOP INTIP SERVER ORANG.
+                    </p>
+                    <p
+                        style={{
+                            margin: 0,
+                            fontSize: '13px',
+                            fontWeight: 700,
+                            color: '#ff6b6b',
+                            textShadow:
+                                '0 0 5px rgba(255,255,255,.7), 0 0 10px rgba(255,59,59,.5)',
+                        }}
+                    >
+                        Server orang lain bukan hak kamu untuk kamu akses maupun lihat.
+                    </p>
+                </div>
+
                 <p
                     style={{
                         color: '#aaa',
-                        margin: '0 0 20px',
-                        fontSize: '14px',
+                        margin: '0 0 18px',
+                        fontSize: '13.5px',
+                        lineHeight: 1.5,
                     }}
                 >
-                    Masukkan password untuk mengakses server ini.
+                    Masukkan password hash kamu jika server ini{' '}
+                    <span style={{ color: '#fff', fontWeight: 700 }}>MILIK KAMU</span>.
                 </p>
 
                 <input
@@ -235,6 +285,7 @@ export default ({ serverId, children }: LockGateProps) => {
                             color: '#ff6b6b',
                             fontSize: '13px',
                             marginBottom: '12px',
+                            fontWeight: 600,
                         }}
                     >
                         {error}

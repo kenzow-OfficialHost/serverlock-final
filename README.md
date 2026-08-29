@@ -1,36 +1,60 @@
-UNTUK VPS PTERO YANG UDAH DI INSTAL blueprint
+# ServerLock — Panduan Instalasi Lengkap (Bahasa Indonesia)
 
-## ServerLock Version Support
+ServerLock adalah extension [Blueprint Framework](https://blueprint.zip) untuk panel
+**Pterodactyl** yang memungkinkan admin mengunci akses ke server tertentu di
+belakang password, sehingga server tidak bisa diintip/diakses oleh user lain
+selain pemiliknya.
 
-![ServerLock Version Support](docs/images/version-support.png)
+> Panduan ini sudah diperbarui total setelah proses debugging penuh di
+> lingkungan produksi. Semua bug yang pernah ditemukan (lihat bagian
+> [Riwayat Perbaikan](#riwayat-perbaikan-changelog)) sudah ditutup di
+> `install.sh` versi ini.
 
-## Cara Install Blueprint (Prasyarat sebelum install ServerLock)
+---
 
-ServerLock membutuhkan [Blueprint Framework](https://github.com/BlueprintFramework/framework) sudah terpasang di panel Pterodactyl kamu.
+## Daftar Isi
 
-### 1. Set path Pterodactyl
-````bash
+1. [Prasyarat](#1-prasyarat)
+2. [Install Blueprint Framework](#2-install-blueprint-framework)
+3. [Install ServerLock](#3-install-serverlock)
+4. [Verifikasi Instalasi](#4-verifikasi-instalasi)
+5. [Cara Pakai (Lock / Status / Unlock)](#5-cara-pakai-lock--status--unlock)
+6. [Reset Password User](#6-reset-password-user)
+7. [Troubleshooting](#7-troubleshooting)
+8. [Riwayat Perbaikan (Changelog)](#riwayat-perbaikan-changelog)
+
+---
+
+## 1. Prasyarat
+
+- VPS dengan **Pterodactyl Panel** yang sudah terinstall dan berjalan normal
+  (default path: `/var/www/pterodactyl`).
+- Akses **root**.
+- Belum wajib punya Crimson Abyss atau extension lain — ServerLock berdiri
+  sendiri, tidak bergantung pada extension pihak ketiga manapun.
+- **Wajib** sudah terpasang **Blueprint Framework** (lihat bagian 2 kalau
+  belum ada).
+
+---
+
+## 2. Install Blueprint Framework
+
+Lewati bagian ini kalau `blueprint -version` di VPS kamu sudah jalan.
+
+```bash
+# 1. Set path Pterodactyl
 export PTERODACTYL_DIRECTORY=/var/www/pterodactyl
-````
 
-### 2. Install dependency dasar
-
-````bash
+# 2. Install dependency dasar
 sudo apt update
 sudo apt install -y curl wget unzip
-````
 
-### 3. Download & extract Blueprint
-
-````bash
+# 3. Download & extract Blueprint (release terbaru)
 cd "$PTERODACTYL_DIRECTORY"
 wget "https://github.com/BlueprintFramework/framework/releases/latest/download/release.zip" -O "$PTERODACTYL_DIRECTORY/release.zip"
 unzip -o release.zip
-````
 
-### 4. Install Node.js, yarn, dan dependency lain
-
-````bash
+# 4. Install Node.js, yarn, dan dependency lain
 sudo apt install -y ca-certificates curl git gnupg unzip wget zip
 
 sudo mkdir -p /etc/apt/keyrings
@@ -42,39 +66,39 @@ sudo apt install -y nodejs
 cd "$PTERODACTYL_DIRECTORY"
 sudo npm i -g yarn
 yarn install
-````
 
-### 5. Buat file `.blueprintrc`
-
-````bash
+# 5. Buat file konfigurasi .blueprintrc
 echo \
 'WEBUSER="www-data";
 OWNERSHIP="www-data:www-data";
 USERSHELL="/bin/bash";' > "$PTERODACTYL_DIRECTORY/.blueprintrc"
-````
 
-> Sesuaikan `WEBUSER`/`OWNERSHIP` kalau webserver kamu bukan pakai user `www-data` (mis. CentOS biasanya `nginx`).
-
-### 6. Jalankan Blueprint installer
-
-````bash
+# 6. Jalankan installer Blueprint
 chmod +x "$PTERODACTYL_DIRECTORY/blueprint.sh"
 sudo bash "$PTERODACTYL_DIRECTORY/blueprint.sh"
-````
+```
 
-Verifikasi berhasil dengan:
+> Sesuaikan `WEBUSER`/`OWNERSHIP` di `.blueprintrc` kalau webserver kamu
+> bukan pakai user `www-data` (misal CentOS biasanya `nginx`).
 
-````bash
+Verifikasi:
+
+```bash
 blueprint -version
-````
+```
 
-> ⚠️ **Backup dulu** folder panel + database sebelum menjalankan ini di server produksi. Referensi resmi: [blueprint.zip/guides/admin/install](https://blueprint.zip/guides/admin/install)
->
-## Cara Install ServerLock
+Kalau muncul versinya (contoh: `beta-2026-08`), lanjut ke bagian 3.
 
-> Pastikan Blueprint Framework sudah terpasang dulu (lihat bagian instalasi Blueprint di atas).
+**Penting:** kalau di tengah jalan panel kamu tiba-tiba error 500, biasanya
+`blueprint.sh` **aman dijalankan ulang** — dia idempotent dan akan
+menampilkan `Blueprint is already installed` kalau memang sudah lengkap,
+atau memperbaiki bagian yang kurang kalau ada yang hilang.
 
-````bash
+---
+
+## 3. Install ServerLock
+
+```bash
 cd /var/www
 
 git clone https://github.com/kenzow-OfficialHost/serverlock-final.git
@@ -84,39 +108,155 @@ cd serverlock-final
 chmod +x install.sh
 
 ./install.sh
-````
+```
 
-Script `install.sh` ini otomatis akan:
+`install.sh` otomatis akan:
 
-1. Cek kamu jalan sebagai root
-2. Cek Pterodactyl terpasang di `/var/www/pterodactyl`
-3. Cek Blueprint (`blueprint -version`) sudah ada
-4. Clone repo ServerLock ke folder sementara
-5. Backup file-file panel yang bakal ditimpa (tersimpan di `/root/serverlock-backup-<tanggal>`)
-6. Pasang runtime ServerLock (`app/`, `database/`, `resources/`, `routes/`)
-7. Pasang file Blueprint extension-nya (tanpa menghapus extension lain yang sudah ada)
-8. Jalankan migration database
-9. Perbaiki permission `storage` & `bootstrap/cache`
-10. Bersihkan cache Laravel
-11. Build ulang frontend (`yarn build:production`)
-12. Validasi otomatis: cek command, route, dan tabel database ServerLock
+1. Cek kamu jalan sebagai root, panel & Blueprint valid.
+2. Clone repo ServerLock ke folder sementara (`/tmp/serverlock-final-install`).
+3. Backup semua file yang bakal ditimpa ke `/root/serverlock-backup-<tanggal>`.
+4. Pasang runtime ServerLock (`app/`, `database/`, `resources/`, `routes/`).
+5. Pasang folder `.blueprint/extensions/serverlock/` **secara lengkap**
+   (termasuk `private/` yang berisi `conf.yml` — bagian yang paling sering
+   kelewat di versi installer lama).
+6. **Mendaftarkan ServerLock ke registry Blueprint** sehingga muncul di
+   halaman `/admin/extensions`.
+7. **Menambahkan alias webpack** secara otomatis kalau belum ada, supaya
+   build frontend tidak gagal.
+8. Menjalankan migration database.
+9. Memperbaiki permission `storage` & `bootstrap/cache`.
+10. Membersihkan cache Laravel & build ulang frontend
+    (`yarn build:production`).
+11. Validasi otomatis: cek command artisan, route, dan tabel database.
 
-Setelah selesai, command yang tersedia:
+Kalau semua sukses, akan muncul ringkasan hijau di akhir output.
 
-````bash
-php artisan serverlock:lock
+---
+
+## 4. Verifikasi Instalasi
+
+```bash
+# Command artisan-nya harus muncul 3 baris ini
+php artisan list | grep serverlock
+
+# Cek isi registry Blueprint (harus ada kata 'serverlock')
+cat /var/www/pterodactyl/.blueprint/extensions/blueprint/private/db/installed_extensions
+```
+
+Lalu buka di browser:
+
+```
+https://domain-panel-kamu/admin/extensions
+```
+
+Kartu **"Server Lock"** harus sudah muncul di sebelah kartu "Blueprint".
+
+---
+
+## 5. Cara Pakai (Lock / Status / Unlock)
+
+Semua command ini **hanya bisa dijalankan dari VPS/SSH**, bukan dari
+frontend admin — ini best practice supaya cuma orang yang punya akses
+server (root) yang bisa mengunci/membuka server siapapun.
+
+Argumen `{server}` boleh diisi salah satu dari:
+- **ID server** (angka, contoh: `5`)
+- **uuidShort** (8 karakter)
+- **UUID penuh**
+
+Cara cari ID/UUID: buka **Admin Panel → Servers**, klik server yang
+dituju, lihat kolom UUID/Identifier di halaman detailnya.
+
+```bash
+cd /var/www/pterodactyl
+
+# Kunci server (password otomatis di-generate, default 10 karakter)
+php artisan serverlock:lock {server}
+
+# Kunci dengan panjang password custom
+php artisan serverlock:lock {server} --length=16
+
+# Lihat status satu server
+php artisan serverlock:status {server}
+
+# Lihat status SEMUA server yang pernah di-lock (kosongkan argumen)
 php artisan serverlock:status
-php artisan serverlock:unlock
-````
 
-Untuk reset password user tertentu:
+# Buka kunci server
+php artisan serverlock:unlock {server}
+```
 
-````bash
+Begitu server dikunci, saat user membuka halaman console server tersebut
+di panel, mereka akan melihat layar **"Server Terkunci"** dan wajib
+memasukkan password yang sudah di-generate sebelum bisa masuk.
+
+---
+
+## 6. Reset Password User
+
+```bash
 /tmp/serverlock-final-install/scripts/serverlock-reset-user.sh USER_ID
-````
+```
 
-> ⚠️ Backup manual folder panel + database juga disarankan sebelum menjalankan installer ini di server produksi, meskipun script sudah membuat backup otomatis.
+---
 
-````
+## 7. Troubleshooting
 
-Silakan gabungkan ke README, lalu commit seperti langkah sebelumnya (isi commit message, pilih commit ke `main`, klik **Commit changes**).
+### "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'"
+Alias webpack belum ada. `install.sh` versi ini sudah menambahkannya
+otomatis. Kalau masih terjadi, cek manual:
+```bash
+grep -n -A 5 "alias: {" /var/www/pterodactyl/webpack.config.js
+```
+Pastikan ada baris:
+```js
+'@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components'),
+```
+
+### ServerLock tidak muncul di /admin/extensions padahal semua command jalan normal
+Ini karena Blueprint **tidak** scan folder untuk menentukan extension yang
+terinstall — dia baca satu file registry:
+```
+.blueprint/extensions/blueprint/private/db/installed_extensions
+```
+Pastikan file itu mengandung kata `serverlock` (formatnya `|nama1,|nama2,`).
+`install.sh` versi ini sudah menambahkannya otomatis di langkah 5/10.
+
+### Panel error 500 setelah utak-atik file Blueprint
+Jalankan ulang installer Blueprint (aman & idempotent):
+```bash
+cd /var/www/pterodactyl
+bash blueprint.sh
+```
+Kalau muncul `Blueprint is already installed`, berarti core Blueprint
+sehat — masalahnya kemungkinan di tempat lain (cek
+`storage/logs/laravel-*.log` untuk pesan error detailnya).
+
+### `php artisan bp:meta` bilang "no relevant data available"
+Ini **normal** dan tidak ada hubungannya dengan apakah ServerLock
+terinstall atau tidak. Command ini hanya untuk cek versi terbaru extension
+dari server `blueprint.zip` (butuh flag `remote_metadata` aktif +
+koneksi internet). Abaikan saja kalau kamu tidak pakai fitur itu.
+
+### `Not enough arguments (missing: "server")`
+Command `serverlock:lock`, `serverlock:unlock`, dan `serverlock:status`
+butuh argumen ID/UUID server — lihat [bagian 5](#5-cara-pakai-lock--status--unlock).
+
+---
+
+## Riwayat Perbaikan (Changelog)
+
+Ringkasan bug yang ditemukan & ditutup di installer versi ini:
+
+| # | Bug | Penyebab | Fix |
+|---|-----|----------|-----|
+| 1 | Build frontend gagal: `Module not found ...LockGate` | Alias `@blueprint/extensions/serverlock` tidak pernah didaftarkan ke `webpack.config.js` | `install.sh` otomatis menambahkan alias tsb |
+| 2 | Extension tidak muncul di `/admin/extensions` | Folder `private/.store/conf.yml` tidak ikut disalin oleh installer lama | `install.sh` sekarang menyalin seluruh folder `private/` |
+| 3 | Tetap tidak muncul walau `conf.yml` sudah ada | Blueprint menentukan daftar extension terinstall dari file `.blueprint/extensions/blueprint/private/db/installed_extensions`, bukan dari scan folder | `install.sh` menambahkan `serverlock` ke file registry tersebut |
+| 4 | Ikon gembok pakai emoji, tidak konsisten & tidak ada peringatan privasi | UI lama seadanya | `LockGate.tsx` dirombak: ikon SVG custom + banner peringatan merah glow |
+
+---
+
+**Perhatian:** ServerLock mengunci akses ke *dashboard* server di panel.
+Gunakan fitur ini secara bertanggung jawab — hanya untuk server yang
+memang berada di bawah kewenangan kamu sebagai admin/pemilik panel.
