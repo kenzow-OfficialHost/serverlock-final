@@ -1,5 +1,9 @@
 # ServerLock — Panduan Instalasi Lengkap (Bahasa Indonesia)
 
+V 3.0 
+![Version](https://img.shields.io/badge/version-3.0-brightgreen)
+![Version Support](docs/images/version-support.png)
+
 ServerLock adalah extension [Blueprint Framework](https://blueprint.zip) untuk panel
 **Pterodactyl** yang memungkinkan admin mengunci akses ke server tertentu di
 belakang password, sehingga server tidak bisa diintip/diakses oleh user lain
