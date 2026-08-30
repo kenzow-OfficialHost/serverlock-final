@@ -203,14 +203,19 @@ memasukkan password yang sudah di-generate sebelum bisa masuk.
 ## 7. Troubleshooting
 
 ### "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'"
-Alias webpack belum ada. `install.sh` versi ini sudah menambahkannya
-otomatis. Kalau masih terjadi, cek manual:
-```bash
-grep -n -A 5 "alias: {" /var/www/pterodactyl/webpack.config.js
+`LockGate.tsx` belum ada di lokasi yang dibaca webpack. `webpack.config.js`
+bawaan Blueprint sudah punya alias generic `@blueprint` yang mengarah ke
+`resources/scripts/blueprint/`, jadi file **wajib** ada di:
 ```
-Pastikan ada baris:
-```js
-'@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components'),
+resources/scripts/blueprint/extensions/serverlock/LockGate.tsx
+```
+`install.sh` versi ini sudah menaruhnya otomatis di sana (bukan di
+`.blueprint/extensions/serverlock/components/` seperti versi lama — folder
+itu cuma dipakai Blueprint untuk metadata, tidak pernah dibaca webpack).
+Kalau masih error, cek manual:
+```bash
+ls -la /var/www/pterodactyl/resources/scripts/blueprint/extensions/serverlock/LockGate.tsx
+grep -n "@blueprint" /var/www/pterodactyl/webpack.config.js
 ```
 
 ### ServerLock tidak muncul di /admin/extensions padahal semua command jalan normal
@@ -250,7 +255,7 @@ Ringkasan bug yang ditemukan & ditutup di installer versi ini:
 
 | # | Bug | Penyebab | Fix |
 |---|-----|----------|-----|
-| 1 | Build frontend gagal: `Module not found ...LockGate` | Alias `@blueprint/extensions/serverlock` tidak pernah didaftarkan ke `webpack.config.js` | `install.sh` otomatis menambahkan alias tsb |
+| 1 | Build frontend gagal: `Module not found ...LockGate` | `LockGate.tsx` ditaruh di `.blueprint/extensions/serverlock/components/`, padahal webpack cuma baca alias `@blueprint` → `resources/scripts/blueprint/` | `install.sh` menaruh `LockGate.tsx` di `resources/scripts/blueprint/extensions/serverlock/` (memanfaatkan alias bawaan Blueprint, tanpa hack webpack.config.js) |
 | 2 | Extension tidak muncul di `/admin/extensions` | Folder `private/.store/conf.yml` tidak ikut disalin oleh installer lama | `install.sh` sekarang menyalin seluruh folder `private/` |
 | 3 | Tetap tidak muncul walau `conf.yml` sudah ada | Blueprint menentukan daftar extension terinstall dari file `.blueprint/extensions/blueprint/private/db/installed_extensions`, bukan dari scan folder | `install.sh` menambahkan `serverlock` ke file registry tersebut |
 | 4 | Ikon gembok pakai emoji, tidak konsisten & tidak ada peringatan privasi | UI lama seadanya | `LockGate.tsx` dirombak: ikon SVG custom + banner peringatan merah glow |

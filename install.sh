@@ -15,13 +15,17 @@
 #      -> INI KUNCI UTAMA supaya ServerLock muncul di /admin/extensions.
 #      Tanpa baris ini, extension bisa jalan di backend tapi TIDAK PERNAH
 #      muncul di halaman admin, walau semua file lain sudah benar.
-#   3. Menambahkan alias webpack '@blueprint/extensions/serverlock' secara
-#      otomatis ke webpack.config.js kalau belum ada
-#      -> tanpa ini, build frontend gagal dengan error:
-#         "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'"
+#   3. Menaruh LockGate.tsx di resources/scripts/blueprint/extensions/serverlock/
+#      -> webpack.config.js BAWAAN Blueprint sudah punya alias generic:
+#         '@blueprint': path.join(__dirname, '/resources/scripts/blueprint')
+#         Jadi import '@blueprint/extensions/serverlock/LockGate' otomatis
+#         nyambung ke file ini TANPA perlu hack/sed webpack.config.js sama
+#         sekali. (Versi installer sebelumnya salah taruh di
+#         .blueprint/extensions/serverlock/components/ yang TIDAK pernah
+#         dibaca webpack sama sekali -> selalu berujung error
+#         "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'")
 #   4. Menyalin admin/index.blade.php (halaman detail extension di admin panel).
-#   5. Idempotent: aman dijalankan berkali-kali (tidak dobel-append registry,
-#      tidak dobel-tambah alias webpack).
+#   5. Idempotent: aman dijalankan berkali-kali (tidak dobel-append registry).
 #
 set -Eeuo pipefail
 
@@ -115,8 +119,8 @@ backup_file "app/Http/Controllers/Extensions/Serverlock/LockController.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/Concerns/ResolvesServer.php"
 backup_file "database/migrations/2026_08_27_000000_create_ext_serverlock_locks_table.php"
 backup_file "resources/scripts/routers/ServerRouter.tsx"
+backup_file "resources/scripts/blueprint/extensions/serverlock/LockGate.tsx"
 backup_file "routes/blueprint/client/serverlock.php"
-backup_file "webpack.config.js"
 backup_file ".blueprint/extensions/blueprint/private/db/installed_extensions"
 
 echo "[OK] Backup: $BACKUP"
@@ -195,31 +199,30 @@ fi
 chown www-data:www-data "$REGFILE"
 
 # ============================================================
-# 9. FIX #3 — ALIAS WEBPACK
+# 9. FIX #3 — TARUH LockGate.tsx DI LOKASI YANG BENAR-BENAR DIBACA WEBPACK
 # ============================================================
 
 echo
-echo "[6/10] Memastikan alias webpack terpasang..."
+echo "[6/10] Memasang komponen frontend LockGate ke lokasi yang benar..."
 
-# ServerRouter.tsx meng-import komponen LockGate lewat alias:
-#   @blueprint/extensions/serverlock/LockGate
-# Alias ini harus ada di resolve.alias milik webpack.config.js,
-# kalau tidak, build akan gagal dengan "Module not found".
+# PENTING: ServerRouter.tsx meng-import lewat:
+#   import LockGate from '@blueprint/extensions/serverlock/LockGate';
+#
+# webpack.config.js BAWAAN Blueprint sudah punya alias generic:
+#   '@blueprint': path.join(__dirname, '/resources/scripts/blueprint')
+#
+# Jadi file HARUS ada di:
+#   resources/scripts/blueprint/extensions/serverlock/LockGate.tsx
+#
+# BUKAN di .blueprint/extensions/serverlock/components/ (folder itu cuma
+# dipakai Blueprint buat metadata/registrasi extension, bukan dibaca webpack).
 
-WEBPACK_CFG="$PANEL/webpack.config.js"
+mkdir -p "$PANEL/resources/scripts/blueprint/extensions/serverlock"
 
-if grep -q "@blueprint/extensions/serverlock" "$WEBPACK_CFG" 2>/dev/null; then
-    echo "[OK] Alias webpack sudah ada, dilewati."
-else
-    if grep -q "alias: {" "$WEBPACK_CFG"; then
-        sed -i "/alias: {/a\\    '@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components')," "$WEBPACK_CFG"
-        echo "[OK] Alias webpack berhasil ditambahkan."
-    else
-        echo "PERINGATAN: tidak ketemu blok 'alias: {' di webpack.config.js."
-        echo "Tambahkan manual baris berikut di dalam resolve.alias:"
-        echo "  '@blueprint/extensions/serverlock': path.resolve(__dirname, '.blueprint/extensions/serverlock/components'),"
-    fi
-fi
+cp -a "$TMP/source/blueprint-extension/components/LockGate.tsx" \
+    "$PANEL/resources/scripts/blueprint/extensions/serverlock/LockGate.tsx"
+
+echo "[OK] LockGate.tsx dipasang di resources/scripts/blueprint/extensions/serverlock/"
 
 # ============================================================
 # 10. PERMISSION
@@ -230,6 +233,7 @@ echo "[7/10] Memperbaiki permission..."
 
 chown -R www-data:www-data \
     "$PANEL/.blueprint/extensions/serverlock" \
+    "$PANEL/resources/scripts/blueprint/extensions/serverlock" \
     "$PANEL/storage" \
     "$PANEL/bootstrap/cache"
 
