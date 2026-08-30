@@ -180,10 +180,13 @@ dituju, lihat kolom UUID/Identifier di halaman detailnya.
 ![Cara cari UUID server](docs/images/cara-cari-uuid-server.png)
 
 ```bash
+# masuk folder dulu
 cd /var/www/pterodactyl
 
+# Kunci pakai uid server kamu hash password server akan di tampilkan otomatis
 # Kunci server (password otomatis di-generate, default 10 karakter)
-php artisan serverlock:lock {server}
+php artisan serverlock:lock UUID SERVER KAMU
+# Contoh= php artisan serverlock:lock eSer33s
 
 # Kunci dengan panjang password custom
 php artisan serverlock:lock {server} --length=16
