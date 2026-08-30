@@ -335,7 +335,8 @@ echo
 echo "Backup perubahan tersimpan di:"
 echo "$BACKUP"
 echo
-echo "Cara pakai:"
+echo "Cara pakai (WAJIB dari dalam folder panel, BUKAN folder serverlock-final):"
+echo "  cd $PANEL"
 echo "  php artisan serverlock:lock {server}     # kunci server (id/uuid/uuidShort)"
 echo "  php artisan serverlock:status [server]   # lihat status (kosongkan utk lihat semua)"
 echo "  php artisan serverlock:unlock {server}   # buka kunci server"

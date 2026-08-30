@@ -167,6 +167,12 @@ Argumen `{server}` boleh diisi salah satu dari:
 Cara cari ID/UUID: buka **Admin Panel → Servers**, klik server yang
 dituju, lihat kolom UUID/Identifier di halaman detailnya.
 
+> **PENTING:** command `php artisan` di bawah ini WAJIB dijalankan dari
+> dalam folder panel Pterodactyl (`/var/www/pterodactyl`), **BUKAN** dari
+> folder repo `serverlock-final`. Kalau muncul error
+> `Could not open input file: artisan`, itu tandanya kamu belum pindah
+> folder — jalankan `cd /var/www/pterodactyl` dulu.
+
 ```bash
 cd /var/www/pterodactyl
 
