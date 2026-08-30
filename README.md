@@ -176,6 +176,9 @@ dituju, lihat kolom UUID/Identifier di halaman detailnya.
 > `Could not open input file: artisan`, itu tandanya kamu belum pindah
 > folder — jalankan `cd /var/www/pterodactyl` dulu.
 
+**CARA MENCARI SERVER ID, SERVER UID KALIAN AKAN KELIATAN DENGAN MELIHAT DETAIL UID SERVER ->**
+![Cara cari UUID server](docs/images/cara-cari-uuid-server.png)
+
 ```bash
 cd /var/www/pterodactyl
 
