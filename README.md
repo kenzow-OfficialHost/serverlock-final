@@ -192,13 +192,13 @@ php artisan serverlock:lock UUID SERVER KAMU
 php artisan serverlock:lock {server} --length=16
 
 # Lihat status satu server
-php artisan serverlock:status {server}
+php artisan serverlock:status ID SERVER
 
 # Lihat status SEMUA server yang pernah di-lock (kosongkan argumen)
 php artisan serverlock:status
 
 # Buka kunci server
-php artisan serverlock:unlock {server}
+php artisan serverlock:unlock ID SERVER
 ```
 
 Begitu server dikunci, saat user membuka halaman console server tersebut
