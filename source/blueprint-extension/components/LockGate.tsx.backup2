@@ -1,0 +1,267 @@
+import React, { ReactNode, useEffect, useState } from 'react';
+
+interface LockGateProps {
+    serverId: string;
+    children: ReactNode;
+}
+
+function getXsrfToken(): string {
+    const match = document.cookie.match(/XSRF-TOKEN=([^;]+)/);
+    return match ? decodeURIComponent(match[1]) : '';
+}
+
+async function apiGet(path: string) {
+    const res = await fetch(`/api/client/extensions/serverlock/${path}`, {
+        method: 'GET',
+        credentials: 'include',
+        headers: {
+            Accept: 'application/json',
+        },
+    });
+
+    return {
+        ok: res.ok,
+        data: await res.json().catch(() => ({})),
+    };
+}
+
+async function apiPost(path: string, body: Record<string, unknown>) {
+    const res = await fetch(`/api/client/extensions/serverlock/${path}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+            Accept: 'application/json',
+            'Content-Type': 'application/json',
+            'X-XSRF-TOKEN': getXsrfToken(),
+        },
+        body: JSON.stringify(body),
+    });
+
+    return {
+        ok: res.ok,
+        data: await res.json().catch(() => ({})),
+    };
+}
+
+export default ({ serverId, children }: LockGateProps) => {
+    const [checking, setChecking] = useState(true);
+    const [locked, setLocked] = useState(false);
+    const [unlocked, setUnlocked] = useState(false);
+
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [submitting, setSubmitting] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const sessionKey = `serverlock:${serverId}`;
+
+        if (sessionStorage.getItem(sessionKey) === 'unlocked') {
+            setUnlocked(true);
+            setChecking(false);
+            return;
+        }
+
+        setChecking(true);
+        setLocked(false);
+        setUnlocked(false);
+        setError('');
+
+        apiGet(`status/${serverId}`)
+            .then(({ ok, data }) => {
+                if (cancelled) return;
+
+                if (ok && data.locked === true) {
+                    setLocked(true);
+                } else {
+                    setLocked(false);
+                }
+
+                setChecking(false);
+            })
+            .catch(() => {
+                if (cancelled) return;
+
+                setLocked(false);
+                setChecking(false);
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [serverId]);
+
+    const submit = async () => {
+        if (!password || submitting) return;
+
+        setSubmitting(true);
+        setError('');
+
+        try {
+            const { ok, data } = await apiPost(`verify/${serverId}`, {
+                password,
+            });
+
+            if (ok && data.valid === true) {
+                sessionStorage.setItem(`serverlock:${serverId}`, 'unlocked');
+
+                setUnlocked(true);
+                setLocked(false);
+                setError('');
+            } else {
+                setError('Password salah. Coba lagi.');
+                setPassword('');
+            }
+        } catch {
+            setError('Gagal menghubungi server. Coba lagi.');
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    /*
+     * Masih mengecek status:
+     * jangan tampilkan isi server dulu.
+     */
+    if (checking) {
+        return null;
+    }
+
+    /*
+     * Server tidak terkunci / sudah berhasil dibuka:
+     * tampilkan seluruh halaman server.
+     */
+    if (!locked || unlocked) {
+        return <>{children}</>;
+    }
+
+    /*
+     * Server terkunci:
+     * halaman server tetap ada di belakang,
+     * tetapi ditutup overlay password.
+     */
+    return (
+        <>
+            {children}
+
+            <div
+                style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 99999,
+                    background: 'rgba(0, 0, 0, 0.94)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    gap: '16px',
+                    color: '#fff',
+                    fontFamily: 'inherit',
+                    padding: '24px',
+                }}
+            >
+                <div
+                    style={{
+                        width: '100%',
+                        maxWidth: '420px',
+                        background: '#111',
+                        border: '1px solid #333',
+                        borderRadius: '12px',
+                        padding: '32px',
+                        boxSizing: 'border-box',
+                        textAlign: 'center',
+                        boxShadow: '0 20px 60px rgba(0, 0, 0, 0.5)',
+                    }}
+                >
+                    <div
+                        style={{
+                            fontSize: '42px',
+                            marginBottom: '12px',
+                        }}
+                    >
+                        🔒
+                    </div>
+
+                    <h2
+                        style={{
+                            margin: '0 0 8px',
+                            fontSize: '22px',
+                            fontWeight: 700,
+                        }}
+                    >
+                        Server Terkunci
+                    </h2>
+
+                    <p
+                        style={{
+                            margin: '0 0 24px',
+                            color: '#aaa',
+                            fontSize: '14px',
+                        }}
+                    >
+                        Masukkan password untuk mengakses server ini.
+                    </p>
+
+                    <input
+                        type="password"
+                        value={password}
+                        autoFocus
+                        disabled={submitting}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                submit();
+                            }
+                        }}
+                        placeholder="Password server"
+                        style={{
+                            width: '100%',
+                            boxSizing: 'border-box',
+                            padding: '12px 14px',
+                            borderRadius: '8px',
+                            border: '1px solid #444',
+                            background: '#080808',
+                            color: '#fff',
+                            outline: 'none',
+                            fontSize: '15px',
+                            textAlign: 'center',
+                            marginBottom: '12px',
+                        }}
+                    />
+
+                    {error && (
+                        <p
+                            style={{
+                                color: '#ff6b6b',
+                                margin: '0 0 12px',
+                                fontSize: '14px',
+                            }}
+                        >
+                            {error}
+                        </p>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={submit}
+                        disabled={submitting || !password}
+                        style={{
+                            width: '100%',
+                            padding: '12px 16px',
+                            borderRadius: '8px',
+                            border: 'none',
+                            background: submitting || !password ? '#555' : '#fff',
+                            color: '#000',
+                            fontWeight: 700,
+                            fontSize: '14px',
+                            cursor: submitting || !password ? 'not-allowed' : 'pointer',
+                        }}
+                    >
+                        {submitting ? 'Memeriksa...' : 'Buka Server'}
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+};

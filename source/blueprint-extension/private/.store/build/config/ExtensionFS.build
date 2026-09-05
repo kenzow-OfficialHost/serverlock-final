@@ -1,0 +1,1 @@
+/* ServerlockStart */ 'blueprint:serverlock' => [ 'driver' => 'local', 'root' => storage_path('extensions/serverlock'), 'url' => env('APP_URL') . '/fs/extensions/serverlock', 'visibility' => 'public', 'throw' => false, ], 'blueprint_private:serverlock' => [ 'driver' => 'local', 'root' => storage_path('.extensions/serverlock'), 'throw' => false, ], /* ServerlockEnd */
