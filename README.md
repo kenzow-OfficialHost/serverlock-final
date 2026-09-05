@@ -263,56 +263,6 @@ Command `serverlock:lock`, `serverlock:unlock`, dan `serverlock:status`
 butuh argumen ID/UUID server — lihat [bagian 5](#5-cara-pakai-lock--status--unlock).
 
 ---
----
-
-## Uninstaller
-
-Script `uninstall-serverlock.sh` untuk mencopot ServerLock secara utuh, tanpa merusak tema apapun yang terpasang di atasnya (Stellar, default Pterodactyl, atau tema lain).
-
-### Kenapa dibuat
-
-`install.sh` bawaan ServerLock cuma menimpa file (`cp -a`) tanpa pernah menyediakan cara membalikkannya. Kalau ServerLock pernah di-install ulang beberapa kali, backup otomatis (`/root/serverlock-backup-*`) juga ikut "kotor" (sudah berisi kode ServerLock dari install sebelumnya), jadi restore dari backup tidak bisa diandalkan.
-
-Uninstaller ini pakai pendekatan berbeda: mencari & menghapus secara spesifik setiap baris/blok yang ditambahkan ServerLock ke file inti panel (berdasarkan marker/komentar yang ServerLock taruh sendiri), bukan menimpa ulang seluruh file. Ini yang bikin aman dipakai apapun temanya, dan aman dijalankan berkali-kali (idempotent).
-
-### Yang dibersihkan
-
-- Tabel database `ext_serverlock_locks` (rollback migration)
-- Entry `serverlock` di registry Blueprint (`installed_extensions`)
-- Semua folder milik ServerLock: `.blueprint/extensions/serverlock`, `app/Console/Commands/Serverlock`, `app/Http/Controllers/Extensions/Serverlock`, `app/BlueprintFramework/Extensions/serverlock`, `resources/scripts/blueprint/extensions/serverlock`, dll.
-- Route file `routes/blueprint/client/serverlock.php`
-- 2 baris registrasi command di `app/Console/Kernel.php`
-- Blok route ServerLock di `app/Providers/Blueprint/RouteServiceProvider.php`
-- Import & wrapper `<LockGate>...</LockGate>` di semua file frontend manapun (bukan cuma path default — jadi tetap kena walau kamu pakai tema custom seperti Stellar), children di dalamnya tetap dipertahankan.
-- Cache Laravel dibersihkan & frontend di-build ulang.
-
-### Cara pakai
-
-```bash
-# Upload script ke server (contoh via scp, sesuaikan port kalau custom)
-scp -P <port_ssh> uninstall-serverlock.sh user@ip-server:/root/
-
-# SSH ke server, jadi root
-ssh user@ip-server -p <port_ssh>
-sudo -i
-
-# Jalankan
-chmod +x uninstall-serverlock.sh
-./uninstall-serverlock.sh
-```
-
-Kalau lokasi panel Pterodactyl kamu bukan `/var/www/pterodactyl`:
-
-```bash
-PANEL=/lokasi/panel/kamu ./uninstall-serverlock.sh
-```
-
-### Setelah dijalankan
-
-1. Buka `https://domain-panel-kamu/admin/extensions` — kartu Server Lock harus sudah hilang.
-2. Buka console salah satu server — harus normal, tanpa error apapun, apapun tema yang kamu pakai.
-3. Script membuat backup `*.bak-serverlock-uninstall` di sebelah tiap file yang diedit (bukan dihapus) — aman dihapus manual setelah kamu yakin semuanya normal.
-4. Kalau step "scan akhir" menemukan sisa referensi `serverlock` yang tidak bisa dibersihkan otomatis (misal karena struktur tema kamu unik), script akan menampilkan daftar file itu — cek & bersihkan manual.
 
 ### Troubleshooting
 
