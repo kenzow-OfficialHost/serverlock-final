@@ -349,14 +349,6 @@ Uninstaller ini pakai pendekatan berbeda: mencari & menghapus secara spesifik se
 
 ### Cara pakai
 
-```bash
-# Upload script ke server (contoh via scp, sesuaikan port kalau custom)
-scp -P <port_ssh> uninstall-serverlock.sh user@ip-server:/root/
-
-# SSH ke server, jadi root
-ssh user@ip-server -p <port_ssh>
-sudo -i
-
 # Jalankan
 chmod +x uninstall-serverlock.sh
 ./uninstall-serverlock.sh
