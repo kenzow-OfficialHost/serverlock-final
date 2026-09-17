@@ -283,7 +283,8 @@ const keyframes = `
 
 const styles: Record<string, React.CSSProperties> = {
     centerWrap: {
-        minHeight: '70vh',
+        minHeight: '100vh',
+        width: '100%',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -349,22 +350,24 @@ const styles: Record<string, React.CSSProperties> = {
         marginBottom: '20px',
         padding: '14px 16px',
         borderRadius: '10px',
-        border: '1px solid rgba(255,45,45,.5)',
-        background: 'rgba(255,45,45,.07)',
+        border: '1px solid rgba(255,80,80,.55)',
+        background: 'rgba(255,45,45,.12)',
     },
     warningTitle: {
         margin: '0 0 6px',
-        fontSize: '15px',
+        fontSize: '14.5px',
         fontWeight: 800,
         letterSpacing: '.3px',
-        color: '#ff5c5c',
-        textShadow: '0 0 6px rgba(255,255,255,.5), 0 0 14px rgba(255,59,59,.5)',
+        lineHeight: 1.4,
+        color: '#ffb3b3',
+        textShadow: 'none',
     },
     warningSub: {
         margin: 0,
         fontSize: '13px',
-        fontWeight: 600,
-        color: '#ff8a8a',
+        fontWeight: 500,
+        lineHeight: 1.5,
+        color: '#e8b4b4',
     },
     helperText: {
         position: 'relative',

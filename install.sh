@@ -26,6 +26,17 @@
 #         "Module not found: Can't resolve '@blueprint/extensions/serverlock/LockGate'")
 #   4. Menyalin admin/index.blade.php (halaman detail extension di admin panel).
 #   5. Idempotent: aman dijalankan berkali-kali (tidak dobel-append registry).
+#   6. (v3) Enforcement backend nyata lewat middleware EnsureServerUnlocked,
+#      rate limit + lockout di /verify, fix akses subuser, installer nggak
+#      lagi nimpa file bareng (Kernel.php/RouteServiceProvider.php) secara
+#      membabi buta.
+#   7. (v3.1) Fix: folder app/Http/Controllers/Admin/Extensions/serverlock/
+#      sempat KELEWATAN ikut disalin pas rombak step (6) di atas -> bikin
+#      "Class ... does not exist" & php artisan route:list gagal total.
+#      Sekarang ikut disalin lagi. Ditambah step composer dump-autoload
+#      otomatis setelah copy file PHP baru -- WAJIB kalau panel pakai
+#      composer --optimize-autoloader (umum di produksi), kalau nggak,
+#      class middleware baru nggak kebaca PHP walau filenya udah ada.
 #
 set -Eeuo pipefail
 
@@ -124,6 +135,7 @@ backup_file() {
 backup_file "app/Providers/Blueprint/RouteServiceProvider.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/LockController.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/Concerns/ResolvesServer.php"
+backup_file "app/Http/Controllers/Admin/Extensions/serverlock/serverlockExtensionController.php"
 backup_file "app/Http/Middleware/Extensions/Serverlock/EnsureServerUnlocked.php"
 backup_file "database/migrations/2026_08_27_000000_create_ext_serverlock_locks_table.php"
 backup_file "database/migrations/2026_09_17_000001_create_ext_serverlock_unlocks_table.php"
@@ -166,11 +178,14 @@ cd "$PANEL"
 
 # --- (a) Folder yang 100% exclusive milik ServerLock ---
 mkdir -p "$PANEL/app/Http/Controllers/Extensions/Serverlock/Concerns"
+mkdir -p "$PANEL/app/Http/Controllers/Admin/Extensions/serverlock"
 mkdir -p "$PANEL/app/Http/Middleware/Extensions/Serverlock"
 mkdir -p "$PANEL/app/Console/Commands/Serverlock"
 
 cp -a "$TMP/source/runtime/app/Http/Controllers/Extensions/Serverlock/." \
     "$PANEL/app/Http/Controllers/Extensions/Serverlock/"
+cp -a "$TMP/source/runtime/app/Http/Controllers/Admin/Extensions/serverlock/." \
+    "$PANEL/app/Http/Controllers/Admin/Extensions/serverlock/"
 cp -a "$TMP/source/runtime/app/Http/Middleware/Extensions/Serverlock/." \
     "$PANEL/app/Http/Middleware/Extensions/Serverlock/"
 cp -a "$TMP/source/runtime/app/Console/Commands/Serverlock/." \
@@ -209,14 +224,37 @@ patch_route_service_provider() {
     cp -a "$ours" "$target.serverlock-suggested"
     echo "      -> Versi lengkap (sudah termasuk perubahan ServerLock) disimpan di:"
     echo "         $target.serverlock-suggested"
-    echo "      -> Diff dulu manual, gabungin perubahan yang perlu, ATAU kalau yakin"
-    echo "         panel ini cuma pakai ServerLock (belum ada extension custom lain"
-    echo "         yang ngubah file ini), tinggal jalankan:"
+    echo "      -> Diff dulu manual (diff '$target' '$target.serverlock-suggested'),"
+    echo "         gabungin perubahan yang perlu, ATAU kalau yakin panel ini cuma"
+    echo "         pakai ServerLock (belum ada extension custom lain yang ngubah"
+    echo "         file ini), tinggal jalankan:"
     echo "           mv '$target.serverlock-suggested' '$target'"
+    echo "           composer dump-autoload -o 2>/dev/null || composer dump-autoload"
     echo "           php artisan optimize:clear"
+    echo "      TANPA composer dump-autoload di atas, middleware EnsureServerUnlocked"
+    echo "      TIDAK akan bisa di-load PHP walau baris route-nya udah ada -- lock"
+    echo "      cuma jalan di tampilan (UI), nggak beneran ngeblok API."
 }
 
 patch_route_service_provider
+
+# --- Composer autoload ---
+# WAJIB dijalankan setelah ada class PHP BARU (EnsureServerUnlocked) di
+# app/, khususnya kalau panel ini pakai `composer install --optimize-autoloader`
+# (umum di setup produksi Pterodactyl) -- classmap yang di-cache nggak
+# otomatis include file baru sampai di-regenerate. Tanpa ini, middleware
+# baru bisa gagal ke-load ("Class ... does not exist") begitu
+# RouteServiceProvider.php mencoba memuatnya.
+echo
+echo "[3c/10] Regenerasi composer autoload (biar class baru ServerLock kebaca)..."
+if command -v composer >/dev/null 2>&1; then
+    (cd "$PANEL" && composer dump-autoload -o 2>/dev/null || composer dump-autoload)
+    echo "[OK] Composer autoload di-regenerate."
+else
+    echo "[!] Command 'composer' tidak ditemukan -- lewati step ini, tapi kalau nanti"
+    echo "    muncul error 'Class ... does not exist', jalankan manual:"
+    echo "      cd $PANEL && composer dump-autoload -o"
+fi
 
 # ============================================================
 # 7. FOLDER EXTENSION BLUEPRINT (LENGKAP — termasuk private/)

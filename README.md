@@ -228,6 +228,15 @@ Perbedaan paling penting dari versi sebelumnya:
 - Root admin selalu bisa lewat lock (karena dialah yang mengunci lewat
   SSH).
 
+**FAQ: "Kok kadang server kebuka sendiri tanpa password?"** Dua
+kemungkinan, keduanya disengaja bukan bug:
+1. Kamu (atau siapapun) pernah berhasil masukin password yang benar
+   sebelumnya — grant-nya berlaku 4 jam, jadi dalam rentang itu nggak
+   akan diminta password lagi sampai grant-nya habis.
+2. Kamu login sebagai **root admin** — di level API selalu dibolehin
+   lewat (biar admin yang ngunci nggak sampai ngunci diri sendiri
+   total), walau tampilan tetap nampilin layar lock.
+
 ---
 
 ## 6. Reset Password User
@@ -344,6 +353,8 @@ Ringkasan bug yang ditemukan & ditutup di installer versi ini:
 | 7 | Subuser yang sah selalu kena 403 | `findServerForUser` cuma cek `owner_id`/`root_admin` | Ditambah cek `$server->subusers()`, logic-nya disatuin di trait `ResolvesServer::userCanAccessServer()` |
 | 8 | Installer nimpa penuh `app/Console/Kernel.php` & berpotensi nimpa `RouteServiceProvider.php` milik extension lain | `cp -a` menyeluruh ke `app/` | `Kernel.php` nggak disentuh sama sekali lagi (Laravel sudah auto-load `Commands/Serverlock/` secara rekursif); `RouteServiceProvider.php` dipatch idempotent — kalau sudah dimodifikasi pihak lain, installer nggak nimpa otomatis, cuma bikin file usulan `.serverlock-suggested` |
 | 9 | Puluhan file `.backup*`/`.before-*`/`.broken-*` numpuk di repo (LockGate.tsx sampai 10+ versi) | Kebiasaan nyimpen backup manual ke git | Semua dihapus, riwayat versi cukup dari git log |
+| 10 | `Class ...serverlockExtensionController does not exist`, `php artisan route:list` gagal total | Rombak installer di fix #8 kelewatan nyalin folder `app/Http/Controllers/Admin/Extensions/serverlock/` (dikira nggak exclusive, padahal iya) | Folder itu ditambahkan lagi ke daftar yang di-copy |
+| 11 | Middleware baru gagal ke-load walau filenya udah ada di server | Panel pakai `composer install --optimize-autoloader`, classmap nggak otomatis update buat class PHP baru | Installer sekarang otomatis jalanin `composer dump-autoload -o` setelah nyalin file PHP baru |
 
 ---
 
