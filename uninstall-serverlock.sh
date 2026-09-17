@@ -80,15 +80,21 @@ fi
 # ------------------------------------------------------------
 
 log "[2/10] Rollback migration database..."
-MIGRATION_FILE=$(find "$PANEL/database/migrations" -maxdepth 1 -iname "*create_ext_serverlock_locks_table*" 2>/dev/null | head -n1 || true)
-if [[ -n "$MIGRATION_FILE" ]]; then
-    php artisan migrate:rollback --path="${MIGRATION_FILE#$PANEL/}" --force || \
-        warn "Rollback migration gagal (mungkin tabel sudah tidak ada), lanjut."
-    rm -f "$MIGRATION_FILE"
-    ok "Migration file dihapus."
-else
-    log "Tidak ada file migration ServerLock ditemukan, dilewati."
-fi
+for pattern in \
+    "*create_ext_serverlock_locks_table*" \
+    "*create_ext_serverlock_unlocks_table*" \
+    "*create_ext_serverlock_attempts_table*"
+do
+    MIGRATION_FILE=$(find "$PANEL/database/migrations" -maxdepth 1 -iname "$pattern" 2>/dev/null | head -n1 || true)
+    if [[ -n "$MIGRATION_FILE" ]]; then
+        php artisan migrate:rollback --path="${MIGRATION_FILE#$PANEL/}" --force || \
+            warn "Rollback migration gagal untuk $(basename "$MIGRATION_FILE") (mungkin tabel sudah tidak ada), lanjut."
+        rm -f "$MIGRATION_FILE"
+        ok "Migration file dihapus: $(basename "$MIGRATION_FILE")"
+    else
+        log "Tidak ada file migration yang cocok pola '$pattern', dilewati."
+    fi
+done
 
 # ------------------------------------------------------------
 # 3. HAPUS DARI REGISTRY BLUEPRINT
@@ -112,6 +118,7 @@ FOLDERS_TO_REMOVE=(
     "$PANEL/.blueprint/extensions/serverlock"
     "$PANEL/app/Console/Commands/Serverlock"
     "$PANEL/app/Http/Controllers/Extensions/Serverlock"
+    "$PANEL/app/Http/Middleware/Extensions/Serverlock"
     "$PANEL/app/Http/Controllers/Admin/Extensions/serverlock"
     "$PANEL/app/BlueprintFramework/Extensions/serverlock"
     "$PANEL/resources/scripts/blueprint/extensions/serverlock"
@@ -161,8 +168,30 @@ if [[ -f "$RSP" ]] && grep -q "ServerLock routes\." "$RSP"; then
         warn "Masih ada sisa teks 'ServerLock routes.' di RouteServiceProvider.php, cek manual."
     fi
 else
-    log "RouteServiceProvider.php sudah bersih / tidak ada jejak ServerLock."
+    log "RouteServiceProvider.php: blok route lama sudah bersih / tidak ditemukan."
 fi
+
+# Bersihkan juga blok middleware enforcement (EnsureServerUnlocked) --
+# ini ditambahkan TERPISAH dari blok route di atas, jadi butuh regex sendiri.
+if [[ -f "$RSP" ]] && grep -q "EnsureServerUnlocked" "$RSP"; then
+    if [[ ! -f "$RSP.bak-serverlock-uninstall" ]]; then
+        cp -a "$RSP" "$RSP.bak-serverlock-uninstall"
+    fi
+    # 1) hapus baris "use ...EnsureServerUnlocked;"
+    sed -i '/use Pterodactyl\\Http\\Middleware\\Extensions\\Serverlock\\EnsureServerUnlocked;/d' "$RSP"
+    # 2) hapus komentar blok "ServerLock: daftarin..." + baris pushMiddlewareToGroup(...)
+    perl -0pi -e 's{\n?\s*/\*\s*\n\s*\* ServerLock:.*?Route::pushMiddlewareToGroup\(.client-api., EnsureServerUnlocked::class\);\n}{\n}s' "$RSP"
+    ok "Blok middleware EnsureServerUnlocked dibersihkan dari RouteServiceProvider.php."
+    if grep -q "EnsureServerUnlocked" "$RSP"; then
+        warn "Masih ada sisa teks 'EnsureServerUnlocked' di RouteServiceProvider.php, cek manual (jangan lupa php artisan optimize:clear setelah dibersihkan manual)."
+    fi
+else
+    log "RouteServiceProvider.php: blok middleware EnsureServerUnlocked sudah bersih / tidak ditemukan."
+fi
+
+# File .serverlock-suggested (kalau installer sebelumnya nggak jadi nimpa
+# otomatis karena file udah dimodifikasi extension lain) -- aman dihapus.
+rm -f "$RSP.serverlock-suggested"
 
 # ------------------------------------------------------------
 # 7. BERSIHKAN SISA IMPORT & WRAPPER LockGate DI FRONTEND

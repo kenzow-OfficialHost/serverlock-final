@@ -5,6 +5,7 @@ namespace Pterodactyl\Providers\Blueprint;
 use Illuminate\Support\Facades\Route;
 use Pterodactyl\Http\Middleware\AdminAuthenticate;
 use Pterodactyl\Http\Middleware\RequireTwoFactorAuthentication;
+use Pterodactyl\Http\Middleware\Extensions\Serverlock\EnsureServerUnlocked;
 use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvider;
 
 class RouteServiceProvider extends ServiceProvider
@@ -16,6 +17,20 @@ class RouteServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        /*
+         * ServerLock: daftarin EnsureServerUnlocked ke middleware group
+         * 'client-api' (dipakai persis sama grup yang dipakai route
+         * /api/client/servers/{server}/** bawaan panel), jadi enforcement
+         * lock jalan di SEMUA endpoint server -- console websocket token,
+         * file manager, database, backup, dst -- bukan cuma di route milik
+         * extension ini sendiri.
+         *
+         * Sengaja lewat pushMiddlewareToGroup() di sini, BUKAN bikin
+         * ServiceProvider baru + daftar manual di config/app.php -- biar
+         * nggak nambah satu lagi file "bersama" yang perlu di-patch installer.
+         */
+        Route::pushMiddlewareToGroup('client-api', EnsureServerUnlocked::class);
+
         $this->routes(function () {
 
             /*

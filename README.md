@@ -204,6 +204,32 @@ memasukkan password yang sudah di-generate sebelum bisa masuk.
 
 ---
 
+## 5b. Keamanan (Baru di v3)
+
+Perbedaan paling penting dari versi sebelumnya:
+
+- **Enforcement sekarang di backend, bukan cuma di UI.** Middleware
+  `EnsureServerUnlocked` jalan di semua route API client server
+  (`/api/client/servers/{server}/**`) — termasuk websocket token console,
+  file manager, database, backup. Sebelumnya lock cuma nyembunyiin
+  tombol di React; sekarang API-nya sendiri nolak (`423 Locked`) kalau
+  belum ada grant yang valid, jadi nggak bisa di-bypass lewat
+  curl/Postman/devtools.
+- **Password yang benar mengeluarkan "grant" berlaku 4 jam** (disimpan
+  di tabel `ext_serverlock_unlocks`), bukan sekadar flag di React state.
+  Artinya kalau refresh/pindah tab, kamu nggak perlu ngetik ulang
+  password selama grant-nya belum kedaluwarsa.
+- **Rate limit ganda di `/verify`:** `throttle:8,1` di level route, plus
+  lockout 5 menit per (user, server) setelah 5 kali salah beruntun
+  (tabel `ext_serverlock_attempts`) — jadi nggak gampang dihindari cuma
+  dengan ganti IP.
+- **Subuser yang memang ditambahkan ke server ikut bisa akses**, nggak
+  cuma pemilik & root admin kayak sebelumnya.
+- Root admin selalu bisa lewat lock (karena dialah yang mengunci lewat
+  SSH).
+
+---
+
 ## 6. Reset Password User
 
 ```bash
@@ -313,6 +339,11 @@ Ringkasan bug yang ditemukan & ditutup di installer versi ini:
 | 2 | Extension tidak muncul di `/admin/extensions` | Folder `private/.store/conf.yml` tidak ikut disalin oleh installer lama | `install.sh` sekarang menyalin seluruh folder `private/` |
 | 3 | Tetap tidak muncul walau `conf.yml` sudah ada | Blueprint menentukan daftar extension terinstall dari file `.blueprint/extensions/blueprint/private/db/installed_extensions`, bukan dari scan folder | `install.sh` menambahkan `serverlock` ke file registry tersebut |
 | 4 | Ikon gembok pakai emoji, tidak konsisten & tidak ada peringatan privasi | UI lama seadanya | `LockGate.tsx` dirombak: ikon SVG custom + banner peringatan merah glow |
+| 5 | Lock bisa di-bypass total lewat API langsung (curl/Postman/devtools) | Enforcement cuma di React (`LockGate` nyembunyiin UI), endpoint asli panel nggak divalidasi | Middleware `EnsureServerUnlocked` didaftarkan ke middleware group `client-api`, nolak semua request server yang belum punya grant unlock valid |
+| 6 | `/verify` bisa di-brute-force tanpa batas | Nggak ada rate limit sama sekali | `throttle:8,1` di route + lockout 5 menit per (user, server) di tabel `ext_serverlock_attempts` |
+| 7 | Subuser yang sah selalu kena 403 | `findServerForUser` cuma cek `owner_id`/`root_admin` | Ditambah cek `$server->subusers()`, logic-nya disatuin di trait `ResolvesServer::userCanAccessServer()` |
+| 8 | Installer nimpa penuh `app/Console/Kernel.php` & berpotensi nimpa `RouteServiceProvider.php` milik extension lain | `cp -a` menyeluruh ke `app/` | `Kernel.php` nggak disentuh sama sekali lagi (Laravel sudah auto-load `Commands/Serverlock/` secara rekursif); `RouteServiceProvider.php` dipatch idempotent — kalau sudah dimodifikasi pihak lain, installer nggak nimpa otomatis, cuma bikin file usulan `.serverlock-suggested` |
+| 9 | Puluhan file `.backup*`/`.before-*`/`.broken-*` numpuk di repo (LockGate.tsx sampai 10+ versi) | Kebiasaan nyimpen backup manual ke git | Semua dihapus, riwayat versi cukup dari git log |
 
 ---
 

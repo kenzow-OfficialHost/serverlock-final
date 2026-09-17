@@ -113,11 +113,21 @@ backup_file() {
     fi
 }
 
-backup_file "app/Console/Kernel.php"
+# CATATAN: app/Console/Kernel.php SENGAJA nggak di-backup/disentuh lagi.
+# Laravel me-load app/Console/Commands SECARA REKURSIF (Symfony Finder),
+# jadi command yang ditaruh di app/Console/Commands/Serverlock/ otomatis
+# ke-load tanpa perlu nambah baris apapun di Kernel.php. Versi installer
+# lama nimpa Kernel.php penuh buat nambah 1 baris yang sebenarnya nggak
+# perlu -- itu file dipakai bareng semua extension lain, jadi lebih aman
+# kalau nggak disentuh sama sekali kalau memang nggak perlu.
+
 backup_file "app/Providers/Blueprint/RouteServiceProvider.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/LockController.php"
 backup_file "app/Http/Controllers/Extensions/Serverlock/Concerns/ResolvesServer.php"
+backup_file "app/Http/Middleware/Extensions/Serverlock/EnsureServerUnlocked.php"
 backup_file "database/migrations/2026_08_27_000000_create_ext_serverlock_locks_table.php"
+backup_file "database/migrations/2026_09_17_000001_create_ext_serverlock_unlocks_table.php"
+backup_file "database/migrations/2026_09_17_000002_create_ext_serverlock_attempts_table.php"
 backup_file "resources/scripts/routers/ServerRouter.tsx"
 backup_file "resources/scripts/blueprint/extensions/serverlock/LockGate.tsx"
 backup_file "routes/blueprint/client/serverlock.php"
@@ -128,18 +138,85 @@ echo "[OK] Backup: $BACKUP"
 # ============================================================
 # 6. RUNTIME (app/, database/, resources/, routes/)
 # ============================================================
+#
+# FIX #4 (versi ini): dulu langkah ini nge-cp -a seluruh
+# "$TMP/source/runtime/app/." ke "$PANEL/app/" -- itu artinya SETIAP file
+# di panel yang kebetulan ada versinya di paket ServerLock ikut ketiban,
+# TERMASUK file yang dipakai bareng extension Blueprint lain
+# (app/Providers/Blueprint/RouteServiceProvider.php). Kalau extension lain
+# sudah nambah kode custom di file itu, ketiban = HILANG (walau ada backup,
+# tetap harus di-restore manual & extension lain jadi berhenti berfungsi
+# sampai ketahuan).
+#
+# Sekarang dipisah jadi dua jalur:
+#   a) Folder yang namanya sudah scoped "*/Serverlock/*" -- 100% cuma
+#      dipakai ServerLock sendiri, TIDAK ADA extension lain yang bakal
+#      pernah nulis ke folder bernama sama -- aman di-cp -a langsung.
+#   b) File yang dipakai bareng (RouteServiceProvider.php) -- lewat
+#      patch_route_service_provider(), yang cuma nulis kalau filenya
+#      belum ada ATAU sudah pernah dipatch ServerLock sebelumnya (idempotent).
+#      Kalau file itu ternyata udah dimodifikasi pihak lain, installer
+#      TIDAK menimpa otomatis -- dia bikinkan file usulan + instruksi
+#      merge manual, daripada diam-diam menghapus punya orang lain.
 
 echo
 echo "[3/10] Memasang ServerLock runtime..."
 
 cd "$PANEL"
 
-cp -a "$TMP/source/runtime/app/." "$PANEL/app/"
+# --- (a) Folder yang 100% exclusive milik ServerLock ---
+mkdir -p "$PANEL/app/Http/Controllers/Extensions/Serverlock/Concerns"
+mkdir -p "$PANEL/app/Http/Middleware/Extensions/Serverlock"
+mkdir -p "$PANEL/app/Console/Commands/Serverlock"
+
+cp -a "$TMP/source/runtime/app/Http/Controllers/Extensions/Serverlock/." \
+    "$PANEL/app/Http/Controllers/Extensions/Serverlock/"
+cp -a "$TMP/source/runtime/app/Http/Middleware/Extensions/Serverlock/." \
+    "$PANEL/app/Http/Middleware/Extensions/Serverlock/"
+cp -a "$TMP/source/runtime/app/Console/Commands/Serverlock/." \
+    "$PANEL/app/Console/Commands/Serverlock/"
+
 cp -a "$TMP/source/runtime/database/." "$PANEL/database/"
 cp -a "$TMP/source/runtime/resources/." "$PANEL/resources/"
 cp -a "$TMP/source/runtime/routes/." "$PANEL/routes/"
 
-echo "[OK] Runtime ServerLock dipasang."
+echo "[OK] Bagian yang exclusive milik ServerLock dipasang."
+
+# --- (b) File yang dipakai bareng extension Blueprint lain ---
+echo
+echo "[3b/10] Memasang RouteServiceProvider.php (mode aman, nggak asal timpa)..."
+
+patch_route_service_provider() {
+    local target="$PANEL/app/Providers/Blueprint/RouteServiceProvider.php"
+    local ours="$TMP/source/runtime/app/Providers/Blueprint/RouteServiceProvider.php"
+    local marker="EnsureServerUnlocked"
+
+    if [[ ! -f "$target" ]]; then
+        mkdir -p "$(dirname "$target")"
+        cp -a "$ours" "$target"
+        echo "  [OK] File belum ada sebelumnya, dipasang langsung."
+        return
+    fi
+
+    if grep -q "$marker" "$target"; then
+        echo "  [OK] Sudah ada block ServerLock (mungkin dari install sebelumnya), dilewati."
+        return
+    fi
+
+    echo "  [!] File sudah ada isinya & belum punya block ServerLock."
+    echo "      Ini file yang dipakai bareng extension Blueprint lain, jadi TIDAK"
+    echo "      ditimpa otomatis -- biar nggak beresiko ngerusak punya extension lain."
+    cp -a "$ours" "$target.serverlock-suggested"
+    echo "      -> Versi lengkap (sudah termasuk perubahan ServerLock) disimpan di:"
+    echo "         $target.serverlock-suggested"
+    echo "      -> Diff dulu manual, gabungin perubahan yang perlu, ATAU kalau yakin"
+    echo "         panel ini cuma pakai ServerLock (belum ada extension custom lain"
+    echo "         yang ngubah file ini), tinggal jalankan:"
+    echo "           mv '$target.serverlock-suggested' '$target'"
+    echo "           php artisan optimize:clear"
+}
+
+patch_route_service_provider
 
 # ============================================================
 # 7. FOLDER EXTENSION BLUEPRINT (LENGKAP — termasuk private/)
@@ -311,14 +388,24 @@ echo
 echo "--- Database ---"
 php artisan tinker --execute='
 try {
-    $count = DB::table("ext_serverlock_locks")->count();
-    echo "ext_serverlock_locks: OK".PHP_EOL;
-    echo "Records: ".$count.PHP_EOL;
+    foreach (["ext_serverlock_locks", "ext_serverlock_unlocks", "ext_serverlock_attempts"] as $t) {
+        $count = DB::table($t)->count();
+        echo "{$t}: OK (records: {$count})".PHP_EOL;
+    }
 } catch (Throwable $e) {
     echo "ERROR DATABASE: ".$e->getMessage().PHP_EOL;
     exit(1);
 }
 '
+
+echo
+echo "--- Middleware enforcement ---"
+if grep -q "EnsureServerUnlocked" "$PANEL/app/Providers/Blueprint/RouteServiceProvider.php" 2>/dev/null; then
+    echo "[OK] EnsureServerUnlocked terdaftar di RouteServiceProvider.php."
+else
+    echo "[!] EnsureServerUnlocked BELUM terdaftar -- lock cuma jalan di UI, belum di-enforce backend."
+    echo "    Lihat pesan '[3b/10]' di atas buat instruksi merge manual."
+fi
 
 echo
 echo "--- Registry Blueprint ---"
